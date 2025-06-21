@@ -1,43 +1,59 @@
-from flask import Flask, request, jsonify
-import pytesseract
-from PIL import Image
-import os
+from flask import Flask, jsonify
+from selenium import webdriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
+import time
 
 app = Flask(__name__)
 
-@app.route('/ocr', methods=['POST'])
-def ocr_image():
-    if 'image' not in request.files:
-        return jsonify({"erro": True, "mensagem": "Imagem não enviada"}), 400
-
-    image_file = request.files['image']
-    caminho = f"/tmp/temp.png"
-    image_file.save(caminho)
-
+@app.route('/ocr/<nif>', methods=['GET'])
+def consultar_nif(nif):
     try:
-        img = Image.open(caminho)
-        texto = pytesseract.image_to_string(img, lang='por')
+        options = Options()
+        options.add_argument('--headless')
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
 
-        nome = estado = iva = ""
+        driver = webdriver.Chrome(options=options)
+        driver.get("https://portaldocontribuinte.minfin.gov.ao/consultar-nif-do-contribuinte")
 
-        if "Nome:" in texto:
-            nome = texto.split("Nome:")[1].split("\n")[0].strip()
-        if "Estado:" in texto:
-            estado = texto.split("Estado:")[1].split("\n")[0].strip()
-        if "Regime de IVA:" in texto:
-            iva = texto.split("Regime de IVA:")[1].split("\n")[0].strip()
+        wait = WebDriverWait(driver, 30)
 
-        os.remove(caminho)
+        campo_nif = wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@type='text' and contains(@class, 'form-control')]")))
+        campo_nif.clear()
+        campo_nif.send_keys(nif)
 
-        return jsonify({
-            "erro": False,
-            "nome": nome,
-            "estado": estado,
-            "regime_iva": iva
-        })
+        botao_pesquisar = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Pesquisar')]")))
+        botao_pesquisar.click()
+
+        # Espera o painel com os dados aparecer
+        painel = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "panel-body")))
+        dados_texto = painel.text
+
+        # Processa os dados para extrair nome, estado e regime de IVA
+        resultado = {
+            "nome": extrair(dados_texto, "Nome:"),
+            "estado": extrair(dados_texto, "Estado:"),
+            "regime_iva": extrair(dados_texto, "Regime de IVA:"),
+        }
+
+        driver.quit()
+        return jsonify({"nif": nif, "resultado": resultado})
 
     except Exception as e:
-        return jsonify({"erro": True, "mensagem": str(e)}), 500
+        driver.save_screenshot("erro_na_consulta.png")
+        driver.quit()
+        return jsonify({"erro": str(e), "mensagem": "❌ Erro durante a consulta"}), 500
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+def extrair(texto, campo):
+    try:
+        inicio = texto.index(campo) + len(campo)
+        fim = texto.index("\n", inicio)
+        return texto[inicio:fim].strip()
+    except:
+        return "❌ Não encontrado"
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=10000)
