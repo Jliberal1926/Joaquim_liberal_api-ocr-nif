@@ -5,6 +5,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 import time
+import os  # <-- Correto: fora do except
 
 app = Flask(__name__)
 
@@ -60,8 +61,8 @@ def consultar_nif():
         except:
             pass
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
-        import os
 
-   if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))  # Render usa uma variável de ambiente PORT
+# ✅ Este bloco precisa estar com a indentação correta e o import os deve estar lá em cima
+if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
