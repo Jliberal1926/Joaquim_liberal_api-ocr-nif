@@ -5,7 +5,7 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from webdriver_manager.chrome import ChromeDriverManager
 import time
-import os  # <-- Correto: fora do except
+import os
 
 app = Flask(__name__)
 
@@ -16,13 +16,15 @@ def consultar_nif():
         return jsonify({"status": "erro", "mensagem": "NIF não fornecido"}), 400
 
     chrome_options = Options()
+    chrome_options.binary_location = os.environ.get("GOOGLE_CHROME_BIN", "/usr/bin/chromium-browser")  # importante
     chrome_options.add_argument("--headless")
     chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
 
-    service = Service(ChromeDriverManager().install())
     try:
+        service = Service(ChromeDriverManager().install())
         driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get("https://portaldocontribuinte.minfin.gov.ao/consultar-nif-do-contribuinte")
         time.sleep(3)
@@ -62,7 +64,6 @@ def consultar_nif():
             pass
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
 
-# ✅ Este bloco precisa estar com a indentação correta e o import os deve estar lá em cima
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
     app.run(host='0.0.0.0', port=port)
