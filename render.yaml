@@ -1,7 +1,10 @@
 services:
   - type: web
-    name: Joaquim_liberal_api-ocr-nif
+    name: liberal-api-nif
     env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python api_ocr.py
-    runtime: python
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "python app.py"
+    plan: free
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: 1
