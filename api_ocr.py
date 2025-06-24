@@ -1,59 +1,62 @@
-from flask import Flask, jsonify
+from flask import Flask, request, jsonify
 from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from webdriver_manager.chrome import ChromeDriverManager
 import time
 
 app = Flask(__name__)
 
-@app.route('/ocr/<nif>', methods=['GET'])
-def consultar_nif(nif):
-    try:
-        options = Options()
-        options.add_argument('--headless')
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
+@app.route('/consultar_nif', methods=['GET'])
+def consultar_nif():
+    nif = request.args.get('nif')
+    if not nif:
+        return jsonify({"status": "erro", "mensagem": "NIF não fornecido"}), 400
 
-        driver = webdriver.Chrome(options=options)
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+
+    service = Service(ChromeDriverManager().install())
+    try:
+        driver = webdriver.Chrome(service=service, options=chrome_options)
         driver.get("https://portaldocontribuinte.minfin.gov.ao/consultar-nif-do-contribuinte")
+        time.sleep(3)
 
-        wait = WebDriverWait(driver, 30)
+        input_field = driver.find_element(By.ID, "j_id_2x:txtNIFNumber")
+        input_field.send_keys(nif)
+        driver.find_element(By.XPATH, "//button[.//span[text()='Pesquisar']]").click()
+        time.sleep(5)
 
-        campo_nif = wait.until(EC.element_to_be_clickable((By.XPATH, "//input[@type='text' and contains(@class, 'form-control')]")))
-        campo_nif.clear()
-        campo_nif.send_keys(nif)
+        def extrair(xpath):
+            try:
+                return driver.find_element(By.XPATH, xpath).text.strip()
+            except:
+                return ""
 
-        botao_pesquisar = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(text(), 'Pesquisar')]")))
-        botao_pesquisar.click()
-
-        # Espera o painel com os dados aparecer
-        painel = wait.until(EC.presence_of_element_located((By.CLASS_NAME, "panel-body")))
-        dados_texto = painel.text
-
-        # Processa os dados para extrair nome, estado e regime de IVA
-        resultado = {
-            "nome": extrair(dados_texto, "Nome:"),
-            "estado": extrair(dados_texto, "Estado:"),
-            "regime_iva": extrair(dados_texto, "Regime de IVA:"),
-        }
+        nome = extrair("//label[contains(text(), 'Nome')]/following::div[1]")
+        tipo = extrair("//label[contains(text(), 'Tipo')]/following::div[1]")
+        estado = extrair("//label[contains(text(), 'Estado')]/following::div[1]")
+        regime_iva = extrair("//label[contains(text(), 'Regime de IVA')]/following::div[1]")
 
         driver.quit()
-        return jsonify({"nif": nif, "resultado": resultado})
 
+        if not nome and not tipo:
+            return jsonify({"status": "erro", "mensagem": "NIF não encontrado ou página mudou"}), 404
+        else:
+            return jsonify({
+                "status": "ok",
+                "nome": nome,
+                "tipo": tipo,
+                "estado": estado,
+                "regime_iva": regime_iva
+            })
     except Exception as e:
-        driver.save_screenshot("erro_na_consulta.png")
-        driver.quit()
-        return jsonify({"erro": str(e), "mensagem": "❌ Erro durante a consulta"}), 500
-
-def extrair(texto, campo):
-    try:
-        inicio = texto.index(campo) + len(campo)
-        fim = texto.index("\n", inicio)
-        return texto[inicio:fim].strip()
-    except:
-        return "❌ Não encontrado"
-
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=10000)
+        try:
+            driver.quit()
+        except:
+            pass
+        return jsonify({"status": "erro", "mensagem": str(e)}), 500
