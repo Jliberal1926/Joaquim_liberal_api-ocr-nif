@@ -60,3 +60,8 @@ def consultar_nif():
         except:
             pass
         return jsonify({"status": "erro", "mensagem": str(e)}), 500
+        import os
+
+   if __name__ == '__main__':
+    port = int(os.environ.get("PORT", 5000))  # Render usa uma variável de ambiente PORT
+    app.run(host='0.0.0.0', port=port)
